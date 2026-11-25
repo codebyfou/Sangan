@@ -102,6 +102,8 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
 .pill{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;font:600 12px/1 var(--display);letter-spacing:.05em;background:rgba(19,20,24,.5);border:1px solid var(--glass-edge);color:var(--muted);font-variant-numeric:tabular-nums}
 .sbar .pulse{margin-left:0}
 .rep{cursor:pointer}
+.vdot{width:8px;height:8px;border-radius:50%;background:var(--graphite);transition:background .1s,box-shadow .1s}
+#sVoice.on{color:var(--cream)}#sVoice.on .vdot{background:var(--ok);box-shadow:0 0 10px var(--ok)}
 .rep[aria-pressed="true"]{color:var(--offwhite);border-color:rgba(184,170,220,.6);background:rgba(139,128,166,.3)}
 .sbar .end{margin-left:auto}
 .viewport{position:relative;flex:1;overflow:hidden;max-width:900px;width:100%;margin:0 auto;
@@ -169,6 +171,7 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
   <div class="sbar">
     <span class="pill" id="sBpm">– BPM</span>
     <span class="pill" id="sBar">Bar –</span>
+    <span class="pill" id="sVoice"><span class="vdot"></span>Voice</span>
     <div class="pulse" id="pulseB" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <button class="pill rep" id="repSec" aria-pressed="false">Repeat section</button>
     <button class="pill rep" id="repAll" aria-pressed="false">Repeat all</button>
@@ -176,6 +179,10 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
   </div>
   <div class="viewport" id="viewport"><div class="lines" id="lines"></div></div>
   <p class="snote" id="snote">Off by a line? Tap the line you're singing.</p>
+  <div class="row" style="justify-content:center;gap:10px;margin-top:8px">
+    <button class="pill rep" id="startNow" hidden>Start now</button>
+    <button class="pill rep" id="sens">Voice sensitivity: medium</button>
+  </div>
   <p class="snote" style="margin-top:2px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#c97b7b;margin-right:6px;vertical-align:middle"></span>Recording this session</p>
 </div>
 
@@ -184,6 +191,7 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
 "use strict";
 const $=s=>document.querySelector(s);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+let voiceDb=6;try{const v=+localStorage.getItem("sangan:voiceDb");if(v)voiceDb=v;}catch(e){}
 /* ================= DSP core ================= */
 const SR=11025,N=1024,HOP=256,NB=N/2;
 const WIN=new Float32Array(N);for(let i=0;i<N;i++)WIN[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
@@ -319,6 +327,7 @@ const T={on:false,ready:false,ctx:null,stream:null,an:null,live:null,rs:null,tot
     let r=0;for(let j=Math.max(0,n-20);j<n;j++)r+=live.Rms[j];r/=Math.min(20,n)||1;this.level=20*Math.log10(r+1e-9);
     const quiet=this.level<-58||(this.music!=null&&this.level<this.music-((session&&!session.armed)?24:14));
     if(quiet)this.soundFrom=n;
+    if(session&&this.fa!==undefined){if(session.armed)checkVoice();else followVoice();}
     const fl=live.flux,nf=fl.length,clk=f=>this.t0+(f*HOP+N/2)/SR;
     if(quiet){if(this.ready){this.bad++;if(this.bad>=2){this.fbeat=this.beats();this.ready=false;this.fa=null;this.music=null;
         this.msg("Music stopped",session?"Lyrics paused. They carry on when the music comes back.":"Play something to recognize the rhythm again.");updateUI();}}
@@ -332,7 +341,6 @@ const T={on:false,ready:false,ctx:null,stream:null,an:null,live:null,rs:null,tot
     if(!this.ready){this.fbpm=est.bpm;this.period=60/est.bpm;const base=this.fbeat!=null?Math.ceil(this.fbeat):0;
       this.fa={clock:tb,beat:base};this.ready=true;this.music=this.level;
       this.msg("Rhythm recognized",session?"Lyrics are moving again.":"Ready. Tap Start session when you are.","ready");updateUI();return;}
-    if(session&&session.armed)checkVoice();else if(session)followVoice();
     const x=this.beats(tb),err=x-Math.round(x);this.fbpm=0.8*this.fbpm+0.2*est.bpm;
     this.fa={clock:tb,beat:x-0.5*err};this.period=0.7*this.period+0.3*(60/this.fbpm);
     this.music=this.music==null?this.level:this.music*0.9+this.level*0.1;
@@ -388,22 +396,30 @@ function setLoop(m){if(m==="section"&&session){const b=T.beats()-session.b0;cons
   $("#repSec").textContent=loop&&loop.m==="section"?"Repeating "+loop.name:"Repeat section";}
 $("#repSec").onclick=()=>setLoop(loop&&loop.m==="section"?null:"section");
 $("#repAll").onclick=()=>setLoop(loop&&loop.m==="all"?null:"all");
-function goLive(){session.armed=false;session.hold=false;session.run=0;if(session.musicV==null){const v=T.live.voc,w=v.slice(-150).sort((a,b)=>a-b);session.musicV=w[w.length>>1]||-60;session.vchk=v.length;session.lastV=T.ctx.currentTime;}$("#snote").textContent="Off by a line? Tap the line you're singing.";}
+const SENS=[[9,"low"],[6,"medium"],[3.5,"high"]];
+function showSens(){const k=SENS.findIndex(x=>x[0]===voiceDb);$("#sens").textContent="Voice sensitivity: "+(SENS[k<0?1:k][1]);}
+$("#sens").onclick=()=>{let k=SENS.findIndex(x=>x[0]===voiceDb);k=(k+1)%SENS.length;voiceDb=SENS[k][0];try{localStorage.setItem("sangan:voiceDb",voiceDb);}catch(e){}showSens();};showSens();
+$("#startNow").onclick=()=>{if(!session)return;const i=session.waitIdx||0;session.b0=Math.round(T.beats())-4*i;if(session.armed)goLive();else{session.hold=false;session.lastV=T.ctx.currentTime;}lastActive=-2;};
+/* live "hearing your voice" light: sustained energy in the voice band above the music around it */
+function voiceNow(){const v=T.live&&T.live.voc;if(!v||v.length<170)return false;const n=v.length;let mn=Infinity;for(let k=n-5;k<n;k++)if(v[k]<mn)mn=v[k];
+  if(session&&session.musicV!=null&&!session.armed)return mn>session.musicV+6&&mn>session.musicP+(voiceDb-6);
+  const w=v.slice(n-160,n-8).sort((a,b)=>a-b);return mn>w[w.length>>1]+6&&mn>w[Math.floor(w.length*0.9)]+(voiceDb-6);}
+function goLive(){session.armed=false;session.hold=false;session.run=0;if(session.musicV==null){const v=T.live.voc,w=v.slice(-150).sort((a,b)=>a-b);session.musicV=w[w.length>>1]||-60;session.musicP=w[Math.floor(w.length*0.9)]||-50;session.vchk=v.length;session.lastV=T.ctx.currentTime;}$("#snote").textContent="Off by a line? Tap the line you're singing.";}
 /* Voice onset: a sustained rise in the vocal band (250 Hz to 3.5 kHz) well above the music's own level. Drum hits are too short to pass. */
-function checkVoice(){const v=T.live&&T.live.voc;if(!v||!T.ready)return;const n=v.length,HOLD=7,BASE=150;
+function checkVoice(){const v=T.live&&T.live.voc;if(!v)return;const n=v.length,HOLD=7,BASE=150;
   for(let f=Math.max(session.chk,BASE+10);f<=n-HOLD;f++){
     const win=v.slice(f-BASE-8,f-8).sort((a,b)=>a-b),med=win[win.length>>1],p90=win[Math.floor(win.length*0.9)];
     let mn=Infinity;for(let k=f;k<f+HOLD;k++)if(v[k]<mn)mn=v[k];
-    if(mn>med+voiceDb&&mn>p90+2){const t=T.t0+(f*HOP+N/2)/SR;session.b0=Math.round(T.beats(t)-0.2)-4*(session.waitIdx||0);session.musicV=med;session.vchk=f;session.lastV=t;goLive();lastActive=-2;return;}}
+    if(mn>med+6&&mn>p90+(voiceDb-6)){const t=T.t0+(f*HOP+N/2)/SR;session.b0=Math.round(T.beats(t)-0.2)-4*(session.waitIdx||0);session.musicV=med;session.musicP=p90;session.vchk=f;session.lastV=t;goLive();lastActive=-2;return;}}
   session.chk=Math.max(session.chk,n-HOLD+1);}
-let voiceDb=8;
+
 /* While singing: notice pauses. After ~3.5 beats without voice, hold on the first unsung line and wait; continue from there when the voice returns. */
 function followVoice(){const v=T.live.voc,n=v.length,clk=f=>T.t0+(f*HOP+N/2)/SR;let run=session.run||0;
-  for(let f=Math.max(session.vchk,5);f<n;f++){let s=Infinity;for(let k=f-4;k<=f;k++)if(v[k]<s)s=v[k];const on=s>session.musicV+voiceDb;
+  for(let f=Math.max(session.vchk,5);f<n;f++){let s=Infinity;for(let k=f-4;k<=f;k++)if(v[k]<s)s=v[k];const on=s>session.musicV+6&&s>session.musicP+(voiceDb-6);
     if(on){run++;if(run>=7)session.lastV=clk(f-6);
       if(session.hold&&run>=7){const t=clk(f-6);session.b0=Math.round(T.beats(t)-0.2)-4*session.waitIdx;session.hold=false;lastActive=-2;
         $("#snote").textContent="Off by a line? Tap the line you're singing.";}}
-    else{run=0;if(T.beats(clk(f))-T.beats(session.lastV)>4)session.musicV=0.97*session.musicV+0.03*s;}}
+    else{run=0;if(T.beats(clk(f))-T.beats(session.lastV)>4){session.musicV=0.97*session.musicV+0.03*s;}}}
   session.run=run;session.vchk=n;
   if(!session.hold){const nowB=T.beats(),lastB=T.beats(session.lastV);
     if(nowB-lastB>3.5&&nowB>session.b0){const rel=(lastB-session.b0)/4,L=Math.max(0,Math.floor(rel));
@@ -428,6 +444,7 @@ function pulse(id){const els=document.querySelectorAll(id+" i");if(!T.ready||!T.
 function frame(){
   if(T.on){$("#lvl").style.width=clamp((T.level+70)/60*100,0,100)+"%";drawScope();if(T.ready)updateUI();}
   pulse("#pulseA");
+  if(session){$("#sVoice").classList.toggle("on",voiceNow());$("#startNow").hidden=!(session.armed||session.hold);}
   if(session&&session.armed){pulse("#pulseB");$("#sBpm").textContent=T.fbpm?Math.round(T.fbpm)+" BPM":"– BPM";$("#sBar").textContent="Sing to start";
     if(lastActive!==-3-(session.waitIdx||0)){const els=$("#lines").querySelectorAll(".line");els.forEach((el,i)=>{el.classList.remove("active","past");el.classList.toggle("next",i===(session.waitIdx||0));});
       const tgt=els[session.waitIdx||0];if(tgt){const vh=$("#viewport").clientHeight;$("#lines").style.transform="translateY("+(vh*0.38-tgt.offsetTop-tgt.offsetHeight/2)+"px)";}lastActive=-3-(session.waitIdx||0);}}
