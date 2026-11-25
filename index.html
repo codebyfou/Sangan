@@ -55,7 +55,16 @@ header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;
 .hint b{color:var(--cream);font-weight:600}
 textarea{width:100%;min-height:200px;resize:vertical;border-radius:16px;border:1px solid var(--glass-edge);background:rgba(19,20,24,.55);color:var(--cream);font:500 15px/1.55 var(--body);padding:12px 14px}
 select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;border:1px solid var(--glass-edge);background:rgba(19,20,24,.55);color:var(--cream);font:500 14px/1.2 var(--body);padding:11px 14px}
-textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--dusk);outline-offset:2px}
+.find{display:flex;flex-direction:column;gap:8px;margin:0}
+.findrow{display:flex;gap:8px}
+.findrow input{flex:1;min-width:0;border-radius:999px;border:1px solid var(--glass-edge);background:rgba(19,20,24,.55);color:var(--cream);font:500 15px/1.2 var(--body);padding:12px 16px}
+.results{display:flex;flex-direction:column;gap:6px}
+.res{display:flex;justify-content:space-between;gap:10px;align-items:center;text-align:left;width:100%;border:1px solid var(--glass-edge);background:rgba(19,20,24,.45);color:var(--cream);border-radius:14px;padding:10px 14px;cursor:pointer;font:500 14px/1.3 var(--body)}
+.res:hover{border-color:rgba(184,170,220,.6);background:rgba(139,128,166,.18)}
+.res b{font:600 13px/1.3 var(--display);display:block}
+.res span{color:var(--muted);font-size:13px}
+.res em{font-style:normal;color:var(--faint);font-size:12px;white-space:nowrap}
+.findrow input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--dusk);outline-offset:2px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 
 .btn{appearance:none;border:1px solid rgba(242,241,236,.35);border-radius:999px;padding:12px 18px;cursor:pointer;
@@ -127,6 +136,13 @@ textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--dusk);o
   </section>
 
   <section class="glass card" aria-label="Lyrics">
+    <form class="find" id="findForm" autocomplete="off">
+      <label class="cap" for="findQ">Find lyrics by song</label>
+      <div class="findrow"><input id="findQ" type="search" placeholder="Song name and artist" enterkeyhint="search"><button class="btn" id="findBtn" type="submit">Find</button></div>
+      <div class="results" id="results"></div>
+      <p class="hint" id="findMsg" hidden></p>
+      <p class="hint" id="geniusWrap" hidden>Not the right one? <a id="geniusLink" target="_blank" rel="noopener" style="color:var(--mist)">Look it up on Genius</a>, copy the lyrics and paste them below.</p>
+    </form>
     <div class="row"><label class="cap" for="lyrics">Your lyrics</label><button class="btn ghost" id="clearLyrics" style="padding:7px 12px;font-size:11px">Clear</button></div>
     <textarea id="lyrics" spellcheck="false"></textarea>
     <p class="hint">One line of text = one bar. Section tags like <b>[Verse]</b> or <b>[Hook]</b> go on their own line.</p>
@@ -236,6 +252,23 @@ ta.oninput=()=>{try{localStorage.setItem(KEY,ta.value);}catch(e){}};
 $("#clearLyrics").onclick=()=>{ta.value="";ta.oninput();ta.focus();};
 function parse(t){const out=[];let sec=null,first=true;for(const raw of t.split(/\r?\n/)){const l=raw.trim();if(!l)continue;const m=l.match(/^\[(.+)\]$/);
   if(m){sec=m[1].trim();first=true;continue;}out.push({text:l,sec,secStart:first&&!!sec});first=false;}return out;}
+
+/* ================= Find lyrics (LRCLIB, a free public lyrics database) ================= */
+const fmsg=t=>{const m=$("#findMsg");m.textContent=t||"";m.hidden=!t;};
+$("#findForm").addEventListener("submit",async e=>{e.preventDefault();const q=$("#findQ").value.trim();const box=$("#results");box.textContent="";
+  if(!q){fmsg("Type a song name, and the artist if you know it.");return;}
+  fmsg("Searching…");$("#findBtn").disabled=true;$("#geniusLink").href="https://genius.com/search?q="+encodeURIComponent(q);$("#geniusWrap").hidden=false;
+  try{const r=await fetch("https://lrclib.net/api/search?q="+encodeURIComponent(q));if(!r.ok)throw 0;const list=(await r.json()).filter(x=>x.plainLyrics||x.syncedLyrics).slice(0,6);
+    if(!list.length){fmsg("No lyrics found for “"+q+"”. Check the spelling or add the artist.");return;}
+    fmsg("Pick the right song:");
+    list.forEach(x=>{const b=document.createElement("button");b.type="button";b.className="res";const d=document.createElement("div");
+      const t=document.createElement("b");t.textContent=x.trackName||"Unknown";const a=document.createElement("span");a.textContent=(x.artistName||"")+(x.albumName?" · "+x.albumName:"");
+      d.append(t,a);const m=document.createElement("em");const dur=Math.round(x.duration||0);m.textContent=dur?Math.floor(dur/60)+":"+String(dur%60).padStart(2,"0"):"";b.append(d,m);
+      b.onclick=()=>{const txt=(x.plainLyrics||x.syncedLyrics.replace(/\[\d+:\d+(?:\.\d+)?\]\s?/g,"")).trim();ta.value=txt;ta.oninput();box.textContent="";
+        fmsg("Loaded “"+(x.trackName||q)+"” by "+(x.artistName||"unknown artist")+". Edit anything you like below.");ta.scrollIntoView({behavior:"smooth",block:"center"});};
+      box.appendChild(b);});}
+  catch(err){fmsg("The lyrics search isn't reachable right now. Check your connection and try again.");}
+  finally{$("#findBtn").disabled=false;}});
 
 /* ================= Room listener ================= */
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
