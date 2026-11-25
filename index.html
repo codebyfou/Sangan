@@ -101,6 +101,8 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
 .sbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .pill{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;font:600 12px/1 var(--display);letter-spacing:.05em;background:rgba(19,20,24,.5);border:1px solid var(--glass-edge);color:var(--muted);font-variant-numeric:tabular-nums}
 .sbar .pulse{margin-left:0}
+.rep{cursor:pointer}
+.rep[aria-pressed="true"]{color:var(--offwhite);border-color:rgba(184,170,220,.6);background:rgba(139,128,166,.3)}
 .sbar .end{margin-left:auto}
 .viewport{position:relative;flex:1;overflow:hidden;max-width:900px;width:100%;margin:0 auto;
   -webkit-mask-image:linear-gradient(180deg,transparent,#000 20%,#000 72%,transparent);mask-image:linear-gradient(180deg,transparent,#000 20%,#000 72%,transparent)}
@@ -121,6 +123,16 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
   <header>
     <div><h1 class="logo chrome-text">SANGAN</h1><div class="tag">Lyrics that move with the room</div></div>
   </header>
+
+  <section class="glass card" id="take" aria-label="Your take" hidden>
+    <div class="row"><h2 class="status" style="font-size:18px">Your take</h2><span class="cap" id="takeInfo"></span></div>
+    <audio id="takeAudio" controls playsinline style="width:100%"></audio>
+    <div class="row" style="justify-content:flex-start">
+      <button class="btn" id="takeWav">Save WAV</button><button class="btn ghost" id="takeMp3">Save MP3</button>
+      <button class="btn ghost" id="takeShare">Share</button><button class="btn ghost" id="takeDel" style="margin-left:auto">Delete</button>
+    </div>
+    <p class="hint" id="takeMsg"></p>
+  </section>
 
   <section class="glass card" aria-label="Room sound">
     <button class="btn violet big" id="recBtn">Recognize room sound</button>
@@ -158,10 +170,13 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
     <span class="pill" id="sBpm">– BPM</span>
     <span class="pill" id="sBar">Bar –</span>
     <div class="pulse" id="pulseB" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <button class="pill rep" id="repSec" aria-pressed="false">Repeat section</button>
+    <button class="pill rep" id="repAll" aria-pressed="false">Repeat all</button>
     <button class="btn ghost end" id="endBtn" style="padding:9px 14px;font-size:12px">End session</button>
   </div>
   <div class="viewport" id="viewport"><div class="lines" id="lines"></div></div>
   <p class="snote" id="snote">Off by a line? Tap the line you're singing.</p>
+  <p class="snote" style="margin-top:2px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#c97b7b;margin-right:6px;vertical-align:middle"></span>Recording this session</p>
 </div>
 
 <script>
@@ -197,7 +212,7 @@ class Resampler{
 /* Feature stream: onset flux per 23 ms frame, and a fingerprint (chroma + normalized onset) per 46 ms. */
 class Feat{
   constructor(){this.q=new Float32Array(1<<15);this.qn=0;this.re=new Float32Array(N);this.im=new Float32Array(N);this.prev=new Float32Array(NB);
-    this.flux=[];this.low=[];this.nf=0;this.cap=2048;this.C=new Float32Array(12*this.cap);this.On=new Float32Array(this.cap);this.Rms=new Float32Array(this.cap);
+    this.flux=[];this.low=[];this.voc=[];this.nf=0;this.cap=2048;this.C=new Float32Array(12*this.cap);this.On=new Float32Array(this.cap);this.Rms=new Float32Array(this.cap);
     this.raw=[];this.nfp=0;this.pc=new Float32Array(12);this.pf=0;this.pr=0;}
   push(x){if(this.qn+x.length>this.q.length){const nq=new Float32Array(Math.max(this.q.length*2,this.qn+x.length));nq.set(this.q.subarray(0,this.qn));this.q=nq;}
     this.q.set(x,this.qn);this.qn+=x.length;let rp=0;while(this.qn-rp>=N){this.frame(rp);rp+=HOP;}
@@ -205,9 +220,9 @@ class Feat{
   frame(off){const q=this.q,re=this.re,im=this.im;let e=0;
     for(let i=0;i<N;i++){const v=q[off+i];e+=v*v;re[i]=v*WIN[i];im[i]=0;}
     fft(re,im);let fl=0,lo=0;const c=this.pc,prev=this.prev;
-    for(let k=1;k<NB;k++){const m=Math.sqrt(re[k]*re[k]+im[k]*im[k]);const l=Math.log1p(m*4);
+    let ve=0;for(let k=1;k<NB;k++){const m=Math.sqrt(re[k]*re[k]+im[k]*im[k]);if(k>=23&&k<=325)ve+=m*m;const l=Math.log1p(m*4);
       if(k>=2&&k<=400){const d=l-prev[k];if(d>0){fl+=d;if(k<=15)lo+=d;}}prev[k]=l;const p=PC[k];if(p>=0)c[p]+=m;}
-    this.flux.push(fl);this.low.push(lo);if(fl>this.pf)this.pf=fl;this.pr+=Math.sqrt(e/N);
+    this.flux.push(fl);this.low.push(lo);this.voc.push(10*Math.log10(ve+1e-9));if(fl>this.pf)this.pf=fl;this.pr+=Math.sqrt(e/N);
     this.nf++;if((this.nf&1)===0)this.emit();}
   emit(){const j=this.nfp;if(j>=this.cap){this.cap*=2;const C=new Float32Array(12*this.cap);C.set(this.C);this.C=C;const O=new Float32Array(this.cap);O.set(this.On);this.On=O;const R=new Float32Array(this.cap);R.set(this.Rms);this.Rms=R;}
     const c=this.pc;let mean=0;for(let i=0;i<12;i++)mean+=c[i];mean/=12;let n2=0;for(let i=0;i<12;i++){const v=c[i]-mean;n2+=v*v;}const nrm=Math.sqrt(n2);
@@ -290,7 +305,7 @@ const T={on:false,ready:false,ctx:null,stream:null,an:null,live:null,rs:null,tot
     const src=ctx.createMediaStreamSource(this.stream);const an=this.an=ctx.createAnalyser();an.fftSize=2048;an.smoothingTimeConstant=0.72;src.connect(an);
     const node=ctx.createScriptProcessor(2048,1,1);const mute=ctx.createGain();mute.gain.value=0;
     this.rs=new Resampler(ctx.sampleRate);this.live=new Feat();this.total=0;this.t0=Infinity;this.soundFrom=0;this.music=null;this.bad=0;this.fa=null;this.fbeat=null;this.fbpm=null;this.ready=false;
-    node.onaudioprocess=e=>{const y=this.rs.process(e.inputBuffer.getChannelData(0));this.live.push(y);this.total+=y.length;const off=ctx.currentTime-this.total/SR;if(off<this.t0)this.t0=off;};
+    node.onaudioprocess=e=>{const raw=e.inputBuffer.getChannelData(0);if(this.rec)this.rec.chunks.push(new Float32Array(raw));const y=this.rs.process(raw);this.live.push(y);this.total+=y.length;const off=ctx.currentTime-this.total/SR;if(off<this.t0)this.t0=off;};
     src.connect(node);node.connect(mute);mute.connect(ctx.destination);this.node=node;this.on=true;
     $("#recBtn").textContent="Stop listening";$("#scopeIdle").hidden=true;listDevices();
     this.msg("Listening…","Hearing the room. Keep the music playing.");this.timer=setInterval(()=>this.tick(),350);updateUI();
@@ -302,7 +317,7 @@ const T={on:false,ready:false,ctx:null,stream:null,an:null,live:null,rs:null,tot
   tick(){
     const live=this.live;if(!live||!this.ctx)return;const n=live.nfp;
     let r=0;for(let j=Math.max(0,n-20);j<n;j++)r+=live.Rms[j];r/=Math.min(20,n)||1;this.level=20*Math.log10(r+1e-9);
-    const quiet=this.level<-58||(this.music!=null&&this.level<this.music-14);
+    const quiet=this.level<-58||(this.music!=null&&this.level<this.music-((session&&!session.armed)?24:14));
     if(quiet)this.soundFrom=n;
     const fl=live.flux,nf=fl.length,clk=f=>this.t0+(f*HOP+N/2)/SR;
     if(quiet){if(this.ready){this.bad++;if(this.bad>=2){this.fbeat=this.beats();this.ready=false;this.fa=null;this.music=null;
@@ -317,6 +332,7 @@ const T={on:false,ready:false,ctx:null,stream:null,an:null,live:null,rs:null,tot
     if(!this.ready){this.fbpm=est.bpm;this.period=60/est.bpm;const base=this.fbeat!=null?Math.ceil(this.fbeat):0;
       this.fa={clock:tb,beat:base};this.ready=true;this.music=this.level;
       this.msg("Rhythm recognized",session?"Lyrics are moving again.":"Ready. Tap Start session when you are.","ready");updateUI();return;}
+    if(session&&session.armed)checkVoice();else if(session)followVoice();
     const x=this.beats(tb),err=x-Math.round(x);this.fbpm=0.8*this.fbpm+0.2*est.bpm;
     this.fa={clock:tb,beat:x-0.5*err};this.period=0.7*this.period+0.3*(60/this.fbpm);
     this.music=this.music==null?this.level:this.music*0.9+this.level*0.1;
@@ -331,13 +347,68 @@ function updateUI(){const ok=T.on&&T.ready&&T.fbpm;$("#startBtn").disabled=!ok;$
   if(ok)$("#bpm").innerHTML=Math.round(T.fbpm)+"<small>BPM</small>";}
 $("#startBtn").onclick=()=>{if($("#startBtn").disabled)return;parsed=parse(ta.value);
   if(!parsed.length){T.msg("Add your lyrics first","Paste them in the lyrics box, then start the session.");ta.focus();return;}
-  session={b0:Math.ceil(T.beats())};renderLines();$("#session").hidden=false;$("#setup").hidden=true;lastActive=-2;};
-$("#endBtn").onclick=()=>{session=null;$("#session").hidden=true;$("#setup").hidden=false;};
+  loop=null;setLoop(null);session={armed:true,b0:null,chk:T.live?T.live.voc.length:0,started:new Date()};T.rec={chunks:[],rate:T.ctx.sampleRate};renderLines();$("#snote").textContent="Waiting for your voice. Start singing and the lyrics follow. Tap any line to start from there.";$("#session").hidden=false;$("#setup").hidden=true;lastActive=-2;};
+$("#endBtn").onclick=()=>{const rec=T.rec,started=session&&session.started;T.rec=null;session=null;$("#session").hidden=true;$("#setup").hidden=false;if(rec)showTake(rec,started);};
+
+/* ================= Take (auto-recorded session) ================= */
+let take=null;
+function pcm(rec){let n=0;for(const c of rec.chunks)n+=c.length;const out=new Float32Array(n);let o=0;for(const c of rec.chunks){out.set(c,o);o+=c.length;}return out;}
+function toWav(x,rate){const n=x.length,ab=new ArrayBuffer(44+n*2),v=new DataView(ab);const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  w(0,"RIFF");v.setUint32(4,36+n*2,true);w(8,"WAVE");w(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+  w(36,"data");v.setUint32(40,n*2,true);for(let i=0;i<n;i++)v.setInt16(44+i*2,clamp(x[i],-1,1)*32767,true);return new Blob([ab],{type:"audio/wav"});}
+function loadLame(){return window.lamejs?Promise.resolve():new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc);});}
+async function toMp3(x,rate){await loadLame();const enc=new lamejs.Mp3Encoder(1,rate,192),parts=[],B=1152,buf=new Int16Array(B);
+  for(let i=0;i<x.length;i+=B){const m=Math.min(B,x.length-i);for(let k=0;k<m;k++)buf[k]=clamp(x[i+k],-1,1)*32767;const d=enc.encodeBuffer(m===B?buf:buf.subarray(0,m));if(d.length)parts.push(new Uint8Array(d));
+    if((i/B)%400===0)await new Promise(r=>setTimeout(r,0));}
+  const e=enc.flush();if(e.length)parts.push(new Uint8Array(e));return new Blob(parts,{type:"audio/mpeg"});}
+const stamp=d=>{const p=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+"-"+p(d.getMinutes());};
+function showTake(rec,started){const x=pcm(rec);if(x.length<rec.rate){return;}
+  if(take&&take.url)URL.revokeObjectURL(take.url);const wav=toWav(x,rec.rate);take={x,rate:rec.rate,wav,url:URL.createObjectURL(wav),name:"Sangan take "+stamp(started||new Date())};
+  $("#takeAudio").src=take.url;const d=Math.round(x.length/rec.rate);$("#takeInfo").textContent=Math.floor(d/60)+":"+String(d%60).padStart(2,"0")+" recorded · "+take.name;
+  const f=new File([wav],take.name+".wav",{type:"audio/wav"});$("#takeShare").hidden=!(navigator.canShare&&navigator.canShare({files:[f]}));
+  $("#takeMsg").textContent="";$("#takeDel").textContent="Delete";$("#take").hidden=false;$("#take").scrollIntoView({behavior:"smooth",block:"start"});}
+function saveBlob(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);}
+$("#takeWav").onclick=()=>{if(!take)return;saveBlob(take.wav,take.name+".wav");$("#takeMsg").textContent="Saved as WAV.";};
+$("#takeMp3").onclick=async()=>{if(!take)return;$("#takeMsg").textContent="Making the MP3…";try{if(!take.mp3)take.mp3=await toMp3(take.x,take.rate);saveBlob(take.mp3,take.name+".mp3");$("#takeMsg").textContent="Saved as MP3.";}
+  catch(e){$("#takeMsg").textContent="The MP3 maker couldn't load. Check your connection, or save as WAV.";}};
+$("#takeShare").onclick=async()=>{if(!take)return;try{await navigator.share({files:[new File([take.wav],take.name+".wav",{type:"audio/wav"})],title:take.name});}catch(e){}};
+let delArm=0;$("#takeDel").onclick=()=>{const now=Date.now();if(now-delArm>3000){delArm=now;$("#takeDel").textContent="Tap again to delete";return;}
+  if(take&&take.url)URL.revokeObjectURL(take.url);take=null;$("#takeAudio").removeAttribute("src");$("#take").hidden=true;};
 function renderLines(){const box=$("#lines");box.textContent="";
-  parsed.forEach((ln,i)=>{if(ln.secStart){const s=document.createElement("div");s.className="sec-label";s.textContent=ln.sec;box.appendChild(s);}
-    const p=document.createElement("p");p.className="line";p.textContent=ln.text;p.dataset.i=i;box.appendChild(p);});}
+  parsed.forEach((ln,i)=>{const p=document.createElement("p");p.className="line";p.textContent=ln.text;p.dataset.i=i;box.appendChild(p);});}
 $("#lines").addEventListener("click",e=>{const p=e.target.closest(".line");if(!p||!session)return;const i=+p.dataset.i;const cur=T.beats();
-  session.b0=Math.round(cur)-4*i;lastActive=-2;});
+  session.waitIdx=i;lastActive=-2;
+  if(session.armed){$("#snote").textContent="Starts at this line as soon as you sing.";return;}
+  session.hold=true;session.run=0;session.vchk=T.live.voc.length;$("#snote").textContent="Waiting here. Sing and it carries on from this line.";});
+let loop=null;
+function secRange(i){let a=i;while(a>0&&!parsed[a].secStart)a--;let e=i+1;while(e<parsed.length&&!parsed[e].secStart)e++;return [a,e];}
+function setLoop(m){if(m==="section"&&session){const b=T.beats()-session.b0;const i=clamp(session.hold?session.waitIdx:Math.floor(b/4),0,parsed.length-1);const r=secRange(i);loop={m,a:r[0],e:r[1],name:parsed[r[0]].sec||"section"};}
+  else loop=m?{m:"all",a:0,e:parsed.length}:null;
+  $("#repSec").setAttribute("aria-pressed",!!loop&&loop.m==="section");$("#repAll").setAttribute("aria-pressed",!!loop&&loop.m==="all");
+  $("#repSec").textContent=loop&&loop.m==="section"?"Repeating "+loop.name:"Repeat section";}
+$("#repSec").onclick=()=>setLoop(loop&&loop.m==="section"?null:"section");
+$("#repAll").onclick=()=>setLoop(loop&&loop.m==="all"?null:"all");
+function goLive(){session.armed=false;session.hold=false;session.run=0;if(session.musicV==null){const v=T.live.voc,w=v.slice(-150).sort((a,b)=>a-b);session.musicV=w[w.length>>1]||-60;session.vchk=v.length;session.lastV=T.ctx.currentTime;}$("#snote").textContent="Off by a line? Tap the line you're singing.";}
+/* Voice onset: a sustained rise in the vocal band (250 Hz to 3.5 kHz) well above the music's own level. Drum hits are too short to pass. */
+function checkVoice(){const v=T.live&&T.live.voc;if(!v||!T.ready)return;const n=v.length,HOLD=7,BASE=150;
+  for(let f=Math.max(session.chk,BASE+10);f<=n-HOLD;f++){
+    const win=v.slice(f-BASE-8,f-8).sort((a,b)=>a-b),med=win[win.length>>1],p90=win[Math.floor(win.length*0.9)];
+    let mn=Infinity;for(let k=f;k<f+HOLD;k++)if(v[k]<mn)mn=v[k];
+    if(mn>med+voiceDb&&mn>p90+2){const t=T.t0+(f*HOP+N/2)/SR;session.b0=Math.round(T.beats(t)-0.2)-4*(session.waitIdx||0);session.musicV=med;session.vchk=f;session.lastV=t;goLive();lastActive=-2;return;}}
+  session.chk=Math.max(session.chk,n-HOLD+1);}
+let voiceDb=8;
+/* While singing: notice pauses. After ~3.5 beats without voice, hold on the first unsung line and wait; continue from there when the voice returns. */
+function followVoice(){const v=T.live.voc,n=v.length,clk=f=>T.t0+(f*HOP+N/2)/SR;let run=session.run||0;
+  for(let f=Math.max(session.vchk,5);f<n;f++){let s=Infinity;for(let k=f-4;k<=f;k++)if(v[k]<s)s=v[k];const on=s>session.musicV+voiceDb;
+    if(on){run++;if(run>=7)session.lastV=clk(f-6);
+      if(session.hold&&run>=7){const t=clk(f-6);session.b0=Math.round(T.beats(t)-0.2)-4*session.waitIdx;session.hold=false;lastActive=-2;
+        $("#snote").textContent="Off by a line? Tap the line you're singing.";}}
+    else{run=0;if(T.beats(clk(f))-T.beats(session.lastV)>4)session.musicV=0.97*session.musicV+0.03*s;}}
+  session.run=run;session.vchk=n;
+  if(!session.hold){const nowB=T.beats(),lastB=T.beats(session.lastV);
+    if(nowB-lastB>3.5&&nowB>session.b0){const rel=(lastB-session.b0)/4,L=Math.max(0,Math.floor(rel));
+      session.waitIdx=Math.min(parsed.length-1,rel-L>0.7?L+1:L);session.hold=true;lastActive=-2;
+      $("#snote").textContent="Paused. Sing again and the lyrics pick up from here.";}}}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&session)$("#endBtn").click();});
 
 /* ================= Drawing ================= */
@@ -357,12 +428,18 @@ function pulse(id){const els=document.querySelectorAll(id+" i");if(!T.ready||!T.
 function frame(){
   if(T.on){$("#lvl").style.width=clamp((T.level+70)/60*100,0,100)+"%";drawScope();if(T.ready)updateUI();}
   pulse("#pulseA");
-  if(session){pulse("#pulseB");const b=T.beats()-session.b0,a=Math.floor(b/4);
+  if(session&&session.armed){pulse("#pulseB");$("#sBpm").textContent=T.fbpm?Math.round(T.fbpm)+" BPM":"– BPM";$("#sBar").textContent="Sing to start";
+    if(lastActive!==-3-(session.waitIdx||0)){const els=$("#lines").querySelectorAll(".line");els.forEach((el,i)=>{el.classList.remove("active","past");el.classList.toggle("next",i===(session.waitIdx||0));});
+      const tgt=els[session.waitIdx||0];if(tgt){const vh=$("#viewport").clientHeight;$("#lines").style.transform="translateY("+(vh*0.38-tgt.offsetTop-tgt.offsetHeight/2)+"px)";}lastActive=-3-(session.waitIdx||0);}}
+  else if(session){pulse("#pulseB");
+    if(loop&&!session.hold){const a0=Math.floor((T.beats()-session.b0)/4);if(a0>=loop.e){session.b0+=4*(loop.e-loop.a);lastActive=-2;}}
+    const b=T.beats()-session.b0,a=Math.floor(b/4);
     $("#sBpm").textContent=T.fbpm?Math.round(T.fbpm)+" BPM":"– BPM";$("#sBar").textContent=b<0?"Starts in "+Math.ceil(-b):"Bar "+(a+1);
-    const els=$("#lines").querySelectorAll(".line");const act=b<0?-1:Math.min(a,els.length);
+    const els=$("#lines").querySelectorAll(".line");const act=session.hold?session.waitIdx:(b<0?-1:Math.min(a,els.length));
+    if(session.hold)$("#sBar").textContent="Paused";
     if(act!==lastActive){els.forEach((el,i)=>{el.classList.toggle("active",i===act);el.classList.toggle("past",i<act);el.classList.toggle("next",i===act+1);});
       const tgt=els[Math.max(0,Math.min(act,els.length-1))];if(tgt){const vh=$("#viewport").clientHeight;$("#lines").style.transform="translateY("+(vh*0.38-tgt.offsetTop-tgt.offsetHeight/2)+"px)";}lastActive=act;}
-    if(act>=0&&els[act])els[act].style.setProperty("--p",clamp((b-act*4)/4,0,1).toFixed(3));}
+    if(act>=0&&els[act])els[act].style.setProperty("--p",session.hold?"0":clamp((b-act*4)/4,0,1).toFixed(3));}
   requestAnimationFrame(frame);}
 window.__sangan={T,get session(){return session}};
 requestAnimationFrame(frame);
