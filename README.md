@@ -1,11 +1,10 @@
 # Sangan
 
-A free browser tool for songwriters, rappers and singers: load a beat, paste your lyrics, and watch them scroll in time like Apple Music or Spotify lyrics.
+Lyrics that move with the room. For songwriters, rappers and singers.
 
-- Detects BPM, bars, the intro and section changes, then places your lines on the bar grid
-- Sliders for tempo, start point, line pace, section pace and lead-in, plus tap sync
-- **Listen (mic):** play your beat from any speaker and the lyrics lock to where it is
+1. Tap **Recognize room sound** and play music on any speaker.
+2. Watch the frequency bars and input level. Sangan recognizes the rhythm and shows the BPM.
+3. Paste your lyrics, then tap **Start session** (it unlocks once the rhythm is recognized).
+4. Your lines move bar by bar with the music. Tap a line if you're off by one.
 
-Everything runs on your device. Nothing is uploaded.
-
-Open `index.html` from any https address (GitHub Pages works) to use the microphone.
+Everything runs on your device. Nothing is uploaded. Live at https://codebyfou.github.io/Sangan/
