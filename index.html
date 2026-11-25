@@ -41,6 +41,22 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 
 .wrap{max-width:760px;margin:0 auto;padding-block:16px 32px;display:flex;flex-direction:column;gap:16px;min-height:100%}
 header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.back{appearance:none;border:1px solid var(--glass-edge);background:rgba(19,20,24,.45);color:var(--cream);border-radius:999px;padding:9px 14px 9px 11px;font:600 12px/1 var(--display);letter-spacing:.04em;cursor:pointer}
+.progs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.prog{appearance:none;text-align:left;cursor:pointer;color:var(--cream);padding:16px;display:flex;flex-direction:column;gap:10px;min-height:150px;transition:transform .2s,box-shadow .3s}
+.prog:active{transform:scale(.98)}
+.prog:hover{box-shadow:inset 0 1px 0 rgba(242,241,236,.18),0 0 24px rgba(159,178,196,.18),0 20px 40px -20px rgba(0,0,0,.6)}
+.orb{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(70% 60% at 35% 25%,#eef0f2 0%,#b9c4cf 32%,#6e8299 64%,#2b3240 100%);
+  box-shadow:inset 0 -6px 14px rgba(139,128,166,.45),inset 0 5px 10px rgba(255,255,255,.35),0 8px 18px rgba(0,0,0,.45)}
+.orb svg{width:24px;height:24px;stroke:#1d2129;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.prog b{font:700 16px/1.15 var(--display)}
+.prog span{font:500 13px/1.4 var(--body);color:var(--muted)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip.g button{padding:9px 13px}
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.links a{text-decoration:none;text-align:center}
+.tog{display:inline-flex;align-items:center;gap:8px;font:500 13px/1 var(--body);color:var(--muted);cursor:pointer}
+.tog input{accent-color:#9FB2C4;width:18px;height:18px}
 .logo{font:800 26px/1 var(--display);letter-spacing:.06em;margin:0}
 .chrome-text{background:linear-gradient(180deg,var(--offwhite) 0%,#d3d9df 30%,var(--steel) 50%,#dfe5ea 60%,var(--mist) 82%,#e8ecf0 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 1px 0 rgba(19,20,24,.7))}
@@ -153,8 +169,38 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
 <div class="aura" aria-hidden="true"><i></i><i></i><i></i></div>
 <div class="wrap" id="setup">
   <header>
-    <div><h1 class="logo chrome-text">SANGAN</h1><div class="tag">Lyrics that move with the room</div></div>
+    <div><h1 class="logo chrome-text">SANGAN</h1><div class="tag" id="progTag">Your music programs</div></div>
+    <button class="back" id="backBtn" hidden>‹ Programs</button>
   </header>
+
+  <section class="progs" id="home" aria-label="Programs">
+    <button class="glass prog" data-go="session"><div class="orb"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></div><b>Lyrics session</b><span>Sing your lyrics over any beat in the room. The words follow your voice.</span></button>
+    <button class="glass prog" data-go="free"><div class="orb"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div><b>Freestyle</b><span>Just play or rap. Sangan records the jam and writes it down as notes.</span></button>
+    <button class="glass prog" data-go="beats"><div class="orb"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></div><b>Find a beat</b><span>Search type beats and free instrumentals by genre, mood or artist.</span></button>
+    <button class="glass prog" data-go="lyrics"><div class="orb"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h4"/></svg></div><b>Lyrics library</b><span>Find lyrics by song name and keep your own songs on this device.</span></button>
+    <button class="glass prog" data-go="studio"><div class="orb"><svg viewBox="0 0 24 24"><path d="M4 18V9M8 18V5M12 18v-7M16 18V7M20 18v-4"/></svg></div><b>Studio</b><span>Your takes: save, share, split into stems or turn into notes. Open any audio file too.</span></button>
+  </section>
+
+  <section class="glass card" id="beatCard" aria-label="Find a beat" hidden>
+    <form class="find" id="beatForm" autocomplete="off">
+      <label class="cap" for="beatQ">Genre, mood or artist</label>
+      <div class="findrow"><input id="beatQ" type="search" placeholder="e.g. neo soul, dark trap, SZA" enterkeyhint="search"><button class="btn" type="submit">Search</button></div>
+    </form>
+    <div class="chips" id="genres"></div>
+    <label class="tog"><input type="checkbox" id="freeOnly" checked> Free beats only</label>
+    <div id="beatOut" hidden>
+      <p class="hint" id="beatQs" style="margin-bottom:10px"></p>
+      <div class="links" id="beatLinks"></div>
+      <p class="hint" style="margin-top:10px">Start a beat there, then come back and open <b>Lyrics session</b> or <b>Freestyle</b>. Sangan hears it through the mic. "Free" beats are usually free for non-profit use with a producer credit, so check the description before you release anything.</p>
+    </div>
+  </section>
+
+  <section class="glass card" id="openCard" aria-label="Open a file" hidden>
+    <div class="row"><div><div class="cap">Open an audio file</div><p class="hint" style="margin-top:6px">Any song, beat or voice memo. Then use Notepad or Stems on it.</p></div>
+      <label class="btn ghost" style="cursor:pointer">Choose file<input type="file" id="fileIn" accept="audio/*,video/*" hidden></label></div>
+    <p class="hint" id="openMsg"></p>
+  </section>
+  <p class="hint" id="noTake" style="text-align:center" hidden>No take yet. Your next session shows up here.</p>
 
   <section class="glass card" id="take" aria-label="Your take" hidden>
     <div class="row"><h2 class="status" style="font-size:18px">Your take</h2><span class="cap" id="takeInfo"></span></div>
@@ -177,7 +223,7 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
     </div>
   </section>
 
-  <section class="glass card" aria-label="Room sound">
+  <section class="glass card" id="roomCard" aria-label="Room sound">
     <button class="btn violet big" id="recBtn">Recognize room sound</button>
     <div id="micPickWrap" hidden><label class="cap" for="micSel">Microphone</label> <select id="micSel"><option value="">Default microphone</option></select></div>
     <div><div class="cap" style="margin-bottom:8px">Frequencies</div>
@@ -191,7 +237,7 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
     <p class="status" id="status">Not listening<small>Play music on a speaker, then tap Recognize room sound.</small></p>
   </section>
 
-  <section class="glass card" aria-label="Lyrics">
+  <section class="glass card" id="lyricsCard" aria-label="Lyrics">
     <form class="find" id="findForm" autocomplete="off">
       <label class="cap" for="findQ">Find lyrics by song</label>
       <div class="findrow"><input id="findQ" type="search" placeholder="Song name and artist" enterkeyhint="search"><button class="btn" id="findBtn" type="submit">Find</button></div>
@@ -207,6 +253,7 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
   </section>
 
   <button class="btn big" id="startBtn" disabled>Start session</button>
+  <button class="btn big" id="freeBtn" disabled hidden>Start freestyle</button>
   <p class="hint" id="startHint" style="text-align:center">Start session unlocks once the rhythm is recognized.</p>
 </div>
 
@@ -421,15 +468,17 @@ const SB=i=>LS[clamp(i,0,LS.length-1)];
 function idxAt(b){if(b<0)return -1;let i=0;while(i<parsed.length&&LS[i+1]<=b)i++;return i;}
 function updateUI(){const ok=T.on&&T.ready&&T.fbpm;$("#vcBtn").disabled=!T.ready||!!vc;$("#startBtn").disabled=!ok;$("#startHint").hidden=!!ok;
   if(ok)$("#bpm").innerHTML=Math.round(T.fbpm)+"<small>BPM</small>";}
-$("#startBtn").onclick=()=>{if($("#startBtn").disabled)return;parsed=parse(ta.value);timeLines();
+function startSession(ff){parsed=ff?[]:parse(ta.value);timeLines();
   const free=!parsed.length;if(!free)saveSong(true);
   loop=null;setLoop(null);session={armed:true,free,b0:null,chk:T.live?T.live.voc.length:0,started:new Date()};T.rec={chunks:[],rate:T.ctx.sampleRate,t0:T.ctx.currentTime,grid:[]};renderLines();
   $("#freeHint").hidden=!free;$("#repSec").hidden=$("#repAll").hidden=free;
-  $("#snote").textContent=free?"Recording. Bar 1 starts with your first sound.":"Waiting for your voice. Start singing and the lyrics follow. Tap any line to start from there.";$("#session").hidden=false;$("#setup").hidden=true;lastActive=-2;keepAwake(true);};
+  $("#snote").textContent=free?"Recording. Bar 1 starts with your first sound.":"Waiting for your voice. Start singing and the lyrics follow. Tap any line to start from there.";$("#session").hidden=false;$("#setup").hidden=true;lastActive=-2;keepAwake(true);}
+$("#startBtn").onclick=()=>{if(!$("#startBtn").disabled)startSession(false);};
+$("#freeBtn").onclick=()=>{if(!$("#freeBtn").disabled)startSession(true);};
 let wake=null;async function keepAwake(on){try{if(on&&navigator.wakeLock&&!wake){wake=await navigator.wakeLock.request("screen");wake.addEventListener("release",()=>{wake=null;});}
   else if(!on&&wake){await wake.release();wake=null;}}catch(e){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&session)keepAwake(true);});
-$("#endBtn").onclick=()=>{keepAwake(false);const rec=T.rec,started=session&&session.started;if(rec)rec.b0=session&&session.b0!=null?session.b0:(rec.grid[0]?Math.round(rec.grid[0][1]):0);T.rec=null;session=null;$("#session").hidden=true;$("#setup").hidden=false;if(rec)showTake(rec,started);};
+$("#endBtn").onclick=()=>{keepAwake(false);const rec=T.rec,started=session&&session.started;if(rec)rec.b0=session&&session.b0!=null?session.b0:(rec.grid[0]?Math.round(rec.grid[0][1]):0);T.rec=null;session=null;$("#session").hidden=true;$("#setup").hidden=false;if(rec)showTake(rec,started);if(take){if(location.hash==="#studio")route();else location.hash="#studio";}};
 
 /* ================= Take (auto-recorded session) ================= */
 let take=null;
@@ -444,6 +493,7 @@ async function toMp3(x,rate){await loadLame();const enc=new lamejs.Mp3Encoder(1,
   const e=enc.flush();if(e.length)parts.push(new Uint8Array(e));return new Blob(parts,{type:"audio/mpeg"});}
 const stamp=d=>{const p=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+"-"+p(d.getMinutes());};
 function showTake(rec,started){const x=pcm(rec);if(x.length<rec.rate){return;}
+  if(!rec.grid||rec.grid.length<10){const d=x.length/rec.rate;rec.grid=[[0,0],[d,d*1.5]];rec.b0=0;}
   if(take&&take.url)URL.revokeObjectURL(take.url);const wav=toWav(x,rec.rate);take={x,rate:rec.rate,grid:rec.grid,b0:rec.b0,wav,url:URL.createObjectURL(wav),name:"Sangan take "+stamp(started||new Date())};
   $("#takeAudio").src=take.url;const d=Math.round(x.length/rec.rate);$("#takeInfo").textContent=Math.floor(d/60)+":"+String(d%60).padStart(2,"0")+" recorded · "+take.name;
   const f=new File([wav],take.name+".wav",{type:"audio/wav"});$("#takeShare").hidden=!(navigator.canShare&&navigator.canShare({files:[f]}));
@@ -550,8 +600,43 @@ $("#stBtn").onclick=async()=>{if(!take)return;if(take.stems){$("#st").hidden=!$(
   catch(e){console.error(e);$("#stBar").hidden=true;msg("");
     $("#takeMsg").textContent=/model/.test(String(e&&e.message))||e instanceof TypeError?"Couldn't download the stem model. Check your connection and try again.":"This device ran out of power for the stem splitter. It works best on a recent iPad or a computer, with short takes.";}
   finally{$("#stBtn").disabled=false;}};
+/* ================= Programs (home screen + router) ================= */
+const PROGS={home:{tag:"Your music programs",show:["#home"]},session:{tag:"Lyrics session",show:["#roomCard","#lyricsCard","#startBtn","#startHint"]},
+  free:{tag:"Freestyle",show:["#roomCard","#freeBtn"]},beats:{tag:"Find a beat",show:["#beatCard"]},lyrics:{tag:"Lyrics library",show:["#lyricsCard"]},
+  studio:{tag:"Studio",show:["#openCard"]}};
+const ALLV=["#home","#roomCard","#lyricsCard","#startBtn","#startHint","#freeBtn","#beatCard","#openCard","#take","#noTake"];
+function route(){const k=(location.hash||"").slice(1),pg=PROGS[k]?k:"home",P=PROGS[pg];ALLV.forEach(id=>{$(id).hidden=!P.show.includes(id);});
+  if(pg==="session")updateUI();
+  if(pg==="studio"){$("#take").hidden=!take;$("#noTake").hidden=!!take;}
+  $("#progTag").textContent=P.tag;$("#backBtn").hidden=pg==="home";window.scrollTo(0,0);}
+window.addEventListener("hashchange",route);
+document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{location.hash="#"+b.dataset.go;});
+$("#backBtn").onclick=()=>{location.hash="";};
+/* Find a beat: build good searches and open them on the sites themselves (no scraping, no keys) */
+const GENRES=["Trap","Neo soul","R&B","Boom bap","Drill","Lo-fi","Afrobeats","Jersey club","Pop","Reggaeton","Jazz rap","Dancehall","Dark","Chill","Sad","Hard"];
+const STYLE=/\b(trap|soul|r&b|rnb|boom ?bap|drill|lo-?fi|afro|jersey|pop|reggaeton|jazz|dancehall|dark|chill|sad|hard|melodic|ambient|guitar|piano|orchestral|phonk|house|gospel|funk|rock|emo|uk|bounce|grime|bpm|instrumental|beat|ballad|club|latin|old ?school|90s|west coast|east coast)\b/i;
+GENRES.forEach(g=>{const c=document.createElement("span");c.className="chip g";const b=document.createElement("button");b.type="button";b.textContent=g;
+  b.onclick=()=>{const q=$("#beatQ");q.value=q.value.trim()&&!q.value.toLowerCase().includes(g.toLowerCase())?q.value.trim()+" "+g.toLowerCase():g.toLowerCase();beatSearch();};c.appendChild(b);$("#genres").appendChild(c);});
+function beatSearch(){const q=$("#beatQ").value.trim();if(!q){$("#beatQ").focus();return;}const free=$("#freeOnly").checked;
+  const base=STYLE.test(q)?(/beat|instrumental/i.test(q)?q:q+" instrumental beat"):q+" type beat";const full=base+(free?" free":"");
+  const L=[["YouTube","https://www.youtube.com/results?search_query="+encodeURIComponent(full)],["SoundCloud","https://soundcloud.com/search/sounds?q="+encodeURIComponent(full)],
+    ["Bandcamp","https://bandcamp.com/search?item_type=t&q="+encodeURIComponent(base.replace(/ type beat$/," beat"))],["BeatStars","https://www.beatstars.com/search?q="+encodeURIComponent(q)+(free?"&free=true":"")]];
+  const box=$("#beatLinks");box.textContent="";L.forEach(([n,u])=>{const a=document.createElement("a");a.className="btn ghost";a.href=u;a.target="_blank";a.rel="noopener";a.textContent=n;box.appendChild(a);});
+  $("#beatQs").textContent="Searching for “"+full+"”. Pick where to look:";$("#beatOut").hidden=false;}
+$("#beatForm").addEventListener("submit",e=>{e.preventDefault();beatSearch();});
+/* Studio: open any audio file as a take (tempo from the file itself) */
+$("#fileIn").onchange=async e=>{const f=e.target.files[0];if(!f)return;$("#openMsg").textContent="Opening “"+f.name+"”…";
+  try{const ac=new (window.OfflineAudioContext||window.webkitOfflineAudioContext)(1,1,44100);const ab=await ac.decodeAudioData(await f.arrayBuffer());
+    const n=ab.length,x=new Float32Array(n);for(let c=0;c<ab.numberOfChannels;c++){const d=ab.getChannelData(c);for(let i=0;i<n;i++)x[i]+=d[i]/ab.numberOfChannels;}
+    const rs=new Resampler(ab.sampleRate),ft=new Feat(),CH=16384;for(let i=0;i<n;i+=CH)ft.push(rs.process(x.subarray(i,Math.min(n,i+CH))));
+    const fl=ft.flux,W=Math.min(430,fl.length),s0=Math.max(0,Math.floor(fl.length/2)-(W>>1));let grid=null,b0=0;
+    if(W>120){const est=tempo(fl.slice(s0,s0+W),null);const bt=t=>((t-N/2/SR)*SR/HOP-s0-est.phase)/est.P;const d=n/ab.sampleRate;grid=[];for(let t=0;t<=d;t+=0.5)grid.push([t,bt(t)]);grid.push([d,bt(d)]);b0=Math.ceil(bt(0));}
+    showTake({chunks:[x],rate:ab.sampleRate,grid,b0},new Date());if(take){take.name=f.name.replace(/\.[^.]+$/,"");$("#takeInfo").textContent=$("#takeInfo").textContent.replace(/· .*$/,"· "+take.name);}$("#openMsg").textContent="";route();}
+  catch(err){console.error(err);$("#openMsg").textContent="Couldn't open this file. Try an MP3, WAV or M4A.";}
+  e.target.value="";};
+route();
 let delArm=0;$("#takeDel").onclick=()=>{const now=Date.now();if(now-delArm>3000){delArm=now;$("#takeDel").textContent="Tap again to delete";return;}
-  if(take&&take.url)URL.revokeObjectURL(take.url);take=null;$("#takeAudio").removeAttribute("src");$("#take").hidden=true;};
+  if(take&&take.url)URL.revokeObjectURL(take.url);take=null;$("#takeAudio").removeAttribute("src");$("#take").hidden=true;route();};
 const cnt=document.createElement("div");cnt.className="cnt";cnt.innerHTML="<i></i><i></i><i></i><i></i>";cnt.setAttribute("aria-hidden","true");
 /* count dots above a line: idx = line, on = which dots light */
 function showCnt(idx,on){const els=$("#lines").querySelectorAll(".line");const t=idx==null?null:els[idx];
@@ -628,7 +713,7 @@ function pulse(id){const els=document.querySelectorAll(id+" i");if(!T.ready||!T.
   const b=T.beats(),k=Math.floor(b),fr=b-k,q=((k-(session?session.b0:0))%4+4)%4;els.forEach((e,i)=>e.classList.toggle("on",i===q&&fr<0.35));}
 function frame(){
   if(T.on){$("#lvl").style.width=clamp((T.level+70)/60*100,0,100)+"%";drawScope();if(T.ready)updateUI();}
-  pulse("#pulseA");
+  pulse("#pulseA");$("#freeBtn").disabled=!T.on;
   if(session){$("#sVoice").classList.toggle("on",voiceNow());$("#startNow").hidden=!(session.armed||session.hold);}
   if(session&&session.armed){pulse("#pulseB");$("#sBpm").textContent=T.fbpm?Math.round(T.fbpm)+" BPM":"– BPM";$("#sBar").textContent="Sing to start";
     if(lastActive!==-3-(session.waitIdx||0)){const els=$("#lines").querySelectorAll(".line");els.forEach((el,i)=>{el.classList.remove("active","past");el.classList.toggle("next",i===(session.waitIdx||0));});
