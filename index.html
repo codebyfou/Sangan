@@ -248,7 +248,8 @@ select{width:100%;appearance:none;-webkit-appearance:none;border-radius:14px;bor
       </div>
 
       <div class="tabpane" id="pane-listen" role="tabpanel" hidden>
-        <p class="hint">Play your beat from any speaker. Sangan hears it and puts the lyrics at the right spot. It needs the same beat loaded under <b>Beat &amp; Lyrics</b> first.</p>
+        <p class="hint"><b>No beat loaded:</b> Sangan follows the tempo it hears. Start the song from the top, or tap the line you're on.<br><b>Beat loaded:</b> it also finds the exact spot in the song by itself.</p>
+        <label class="row cap" style="gap:6px;cursor:pointer"><input type="checkbox" id="followOnly"> Follow tempo only, even with a beat loaded</label>
         <div id="micPickWrap"><label class="cap" for="micSel">Microphone</label>
           <select id="micSel"><option value="">Default microphone</option></select></div>
         <p class="hint" id="iosMicNote" hidden>On iPhone and iPad the active microphone is used automatically (built-in, or a plugged-in mic or headset).</p>
@@ -366,7 +367,7 @@ async function analyse(buffer,onProgress){
   const grid=bars(F,t);
   return {feat:F,duration:buffer.duration,bpm:t.bpm,...grid};
 }
-function tempo(flux){
+function tempo(flux,near){
   const n=flux.length,fr=HOP/SR,env=new Float32Array(n),w=16;let acc=0;const pre=new Float64Array(n+1);
   for(let i=0;i<n;i++)pre[i+1]=pre[i]+flux[i];
   for(let i=0;i<n;i++){const a=Math.max(0,i-w),b=Math.min(n,i+w+1);env[i]=Math.max(0,flux[i]-(pre[b]-pre[a])/(b-a));}
@@ -376,10 +377,11 @@ function tempo(flux){
   const y0=acf[bl-1],y1=acf[bl],y2=acf[bl+1];const den=y0-2*y1+y2;const lag=bl+(den!==0?0.5*(y0-y2)/den:0);
   const bpm0=60/(lag*fr);
   const at=t=>{const i=t|0,f=t-i;return i+1<n?env[i]*(1-f)+env[i+1]*f:0};
-  let best={s:-1,bpm:bpm0,ph:0};
-  for(let bpm=bpm0-1.5;bpm<=bpm0+1.5;bpm+=0.02){const P=60/bpm/fr;
+  const c0=near||bpm0,rng=near?near*0.06:1.5,stp=near?0.05:0.02;let best={s:-1,bpm:c0,ph:0};
+  for(let bpm=c0-rng;bpm<=c0+rng;bpm+=stp){const P=60/bpm/fr;
     for(let ph=0;ph<P;ph+=0.25){let s=0,c=0;for(let t=ph;t<n-1;t+=P){s+=at(t);c++;}s/=c;if(s>best.s)best={s,bpm,ph};}}
-  return {bpm:best.bpm,phase:best.ph,P:60/best.bpm/fr};
+  let me=0;for(let i=0;i<n;i++)me+=env[i];me/=n||1;
+  return {bpm:best.bpm,phase:best.ph,P:60/best.bpm/fr,conf:best.s/(me+1e-9),env};
 }
 function bars(F,t){
   const fr=HOP/SR,beatT=k=>(t.phase+k*t.P)*fr+N/(2*SR);
@@ -559,7 +561,7 @@ audio.onplay=()=>{$("#playIcon").innerHTML=PAUSE;$("#playBtn").setAttribute("ari
 audio.onpause=()=>{$("#playIcon").innerHTML=PLAY;$("#playBtn").setAttribute("aria-label","Play");};
 $("#seek").oninput=e=>{if(st.src==="play"){audio.currentTime=+e.target.value;lastActive=-2;}};
 function updateTime(){const t=now(),d=beat?beat.duration:0;$("#time").textContent=fmt(t)+" / "+fmt(d);if(document.activeElement!==$("#seek"))$("#seek").value=t;fill($("#seek"));}
-$("#lines").addEventListener("click",e=>{const p=e.target.closest(".line");if(!p||st.src!=="play"||!audio.src)return;audio.currentTime=Math.max(0,times[+p.dataset.i]-0.05);lastActive=-2;});
+$("#lines").addEventListener("click",e=>{const p=e.target.closest(".line");if(p&&st.src==="mic"&&T.mode==="follow"&&T.state!=="off"){T.toLine(+p.dataset.i);return;}if(!p||st.src!=="play"||!audio.src)return;audio.currentTime=Math.max(0,times[+p.dataset.i]-0.05);lastActive=-2;});
 
 /* tap sync */
 function setTap(on){tapMode=on;$("#tapMode").textContent=on?"Stop tap sync":"Tap sync";$("#tapBtn").hidden=!on;$("#tapBtn").classList.toggle("on",on);$("#dock").classList.toggle("tapping",on);
@@ -591,7 +593,7 @@ const T={state:"off",ctx:null,stream:null,node:null,live:null,rs:null,total:0,t0
     const sel=$("#micSel"),cur=sel.value;sel.textContent="";const o=document.createElement("option");o.value="";o.textContent="Default microphone";sel.appendChild(o);
     ds.forEach((d,i)=>{if(d.deviceId==="default"||d.deviceId==="")return;const op=document.createElement("option");op.value=d.deviceId;op.textContent=d.label||("Microphone "+(i+1));sel.appendChild(op);});sel.value=cur;}catch(e){}},
   async start(){
-    if(!beat){this.msg("Load your beat first","Sangan needs the same beat loaded so it knows what to listen for.");selTab("lyrics");return;}
+    this.mode=(!beat||$("#followOnly").checked)?"follow":"match";
     if(window.self!==window.top){this.msg("Listen needs its own page","Open Sangan from its own web address to use the microphone. Everything else works here.");return;}
     if(!navigator.mediaDevices?.getUserMedia){this.msg("Microphone isn't available here","Open Sangan from its own web address (https) in Safari or Chrome.");return;}
     try{const dev=$("#micSel").value;const c={echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1};if(dev&&!isIOS)c.deviceId={exact:dev};
@@ -599,27 +601,34 @@ const T={state:"off",ctx:null,stream:null,node:null,live:null,rs:null,total:0,t0
     catch(e){this.msg("Microphone blocked",e&&e.name==="NotAllowedError"?"Allow microphone access for this page in the browser settings, then try again.":"This page can't reach a microphone. Open Sangan from its own web address in Safari or Chrome.");return;}
     const ctx=this.ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state!=="running")await ctx.resume();
     const src=ctx.createMediaStreamSource(this.stream);const node=this.node=ctx.createScriptProcessor(2048,1,1);const mute=ctx.createGain();mute.gain.value=0;
-    this.rs=new Resampler(ctx.sampleRate);this.live=new Feat();this.total=0;this.t0=Infinity;this.anchor=null;this.bad=0;this.iter=0;this.jump=null;this.amb=false;this.soundFrom=0;
+    this.rs=new Resampler(ctx.sampleRate);this.live=new Feat();this.total=0;this.t0=Infinity;this.anchor=null;this.bad=0;this.iter=0;this.jump=null;this.amb=false;this.soundFrom=0;this.fa=null;this.fbeat=null;this.fbpm=null;this.period=0.65;
     node.onaudioprocess=e=>{const x=e.inputBuffer.getChannelData(0);const y=this.rs.process(x);this.live.push(y);this.total+=y.length;const off=ctx.currentTime-this.total/SR;if(off<this.t0)this.t0=off;};
     src.connect(node);node.connect(mute);mute.connect(ctx.destination);this.state="search";
-    $("#listenBtn").textContent="Stop listening";if(st.src!=="mic")setSrc("mic");this.msg("Listening…","Play the beat on your speaker.");this.listDevices();
+    $("#listenBtn").textContent="Stop listening";if(st.src!=="mic")setSrc("mic");this.msg("Listening…",this.mode==="follow"?"Start the song from the top on your speaker. Started mid-song? Tap the line you're on.":"Play the beat on your speaker.");this.listDevices();
     this.timer=setInterval(()=>this.tick(),350);updateSrcPill();
   },
   stop(){clearInterval(this.timer);if(this.stream)this.stream.getTracks().forEach(t=>t.stop());if(this.ctx)this.ctx.close().catch(()=>{});
     this.stream=null;this.ctx=null;if(this.state!=="off")this.frozen=this.pos();this.state="off";this.anchor=null;$("#listenBtn").textContent="Start listening";
     $("#lvl").style.width="0";$("#conf").style.width="0";this.msg("Not listening","Tip: press Start listening before you hit play on the speaker. It locks fastest from the start of the beat.");updateSrcPill();},
-  pos(){if(this.state==="lock"&&this.anchor&&this.ctx)return this.anchor.pos+(this.ctx.currentTime-this.anchor.clock);return this.frozen;},
+  beats(t){if(this.state==="lock"&&this.fa)return this.fa.beat+((t??this.ctx.currentTime)-this.fa.clock)/this.period;return this.fbeat??0;},
+  vt(b){return (beat?beat.firstDownbeat:0.5)+st.fine/1000+b/4*barDur();},
+  pos(){if(this.mode==="follow"){if(this.state==="off")return this.frozen;return this.vt(this.beats());}
+    if(this.state==="lock"&&this.anchor&&this.ctx)return this.anchor.pos+(this.ctx.currentTime-this.anchor.clock);return this.frozen;},
   measure(o,ls,L){return fpEnd(o+L-1)+(this.ctx.currentTime-(this.t0+fpEnd(ls+L-1)))+st.micDelay/1000;},
-  constrain(i){if(this.state==="off"){this.msg("Start listening first","Then tap where you are if it picks the wrong spot.");return;}
+  toLine(i){const lb=(times[i]-this.vt(0))/barDur()*4;
+    if(this.state==="lock"&&this.fa){const cur=this.beats();this.fa={clock:this.ctx.currentTime,beat:cur+(lb-Math.round(cur))};}else this.fbeat=lb;lastActive=-2;
+    this.msg(this.state==="lock"?"Following from “"+parsed[i].text+"”":"Will start at “"+parsed[i].text+"”","Keep the music playing.");},
+  constrain(i){if(this.mode==="follow"&&this.state!=="off"){this.toLine(i);return;}if(this.state==="off"){this.msg("Start listening first","Then tap where you are if it picks the wrong spot.");return;}
     let j=i+1;while(j<parsed.length&&!parsed[j].secStart)j++;const a=times[i]-1.5,b=(j<parsed.length?times[j]:beat.duration)+1.5;
     this.cons=[a,b];this.state="search";this.anchor=null;this.msg("Finding your spot in "+parsed[i].sec+"…","Keep the beat playing.");},
   msg(a,b){const el=$("#micStatus");el.textContent=a;if(b){const s=document.createElement("small");s.textContent=b;el.appendChild(s);}},
   tick(){
-    const live=this.live,ref=beat.feat;if(!live||!this.ctx)return;const n=live.nfp;
+    const live=this.live;if(!live||!this.ctx)return;const n=live.nfp;const ref=beat?beat.feat:null;
     let r=0;for(let j=Math.max(0,n-20);j<n;j++)r+=live.Rms[j];r/=Math.min(20,n)||1;this.level=20*Math.log10(r+1e-9);
     $("#lvl").style.width=clamp((this.level+70)/60*100,0,100)+"%";
     const quiet=this.level<-58||(this.music!=null&&this.level<this.music-14);
     if(quiet)this.soundFrom=n;
+    if(this.mode==="follow")return this.followTick(quiet);
     if(quiet){if(this.state==="lock"){this.bad++;if(this.bad>=2){this.frozen=this.pos()-0.5;this.music=null;this.state="search";this.msg("Music stopped","Lyrics paused. They pick up again when the beat comes back.");updateSrcPill();}}return;}
     const L=Math.min(n-(this.soundFrom||0),130);if(L<(this.state==="lock"?44:66))return;const ls=n-L;
     if(this.state==="lock"){
@@ -640,6 +649,27 @@ const T={state:"off",ctx:null,stream:null,node:null,live:null,rs:null,total:0,t0
       this.anchor={pos:this.measure(pick,ls,L),clock:this.ctx.currentTime};this.state="lock";this.bad=0;this.amb=pk.cands.length>1;this.cons=null;lastActive=-2;
       this.msg("Locked to your speaker",this.amb?"This beat repeats, so this is a best guess. If it's the wrong part, tap where you are below.":"Lyrics are following your speaker.");updateSrcPill();}
   },
+  followTick(quiet){
+    const fl=this.live.flux,nf=fl.length,fr=HOP/SR,clk=f=>this.t0+(f*HOP+N/2)/SR+st.micDelay/1000;
+    if(quiet){if(this.state==="lock"){this.bad++;if(this.bad>=2){this.fbeat=this.beats()-0.5/this.period;this.state="search";this.fa=null;this.music=null;
+      this.msg("Music stopped","Lyrics paused. They carry on when the music comes back.");updateSrcPill();}}return;}
+    const sf=(this.soundFrom||0)*2,avail=nf-sf;
+    if(avail<250){if(this.state!=="lock")this.msg("Hearing music…","Finding the tempo. Keep it playing.");return;}
+    const W=Math.min(avail,430),s0=nf-W,est=tempo(fl.slice(s0,nf),this.state==="lock"?this.fbpm:null);this.setConf((est.conf-1)/2);
+    if(est.conf<1.45){if(this.state==="lock"){this.bad++;if(this.bad>=8){this.fbeat=this.beats();this.state="search";this.fa=null;this.msg("Lost the beat","Listening again…");updateSrcPill();}}return;}
+    this.bad=0;const P=est.P;
+    if(this.state!=="lock"){
+      let mx=0;for(let i=0;i<Math.min(W,90);i++)if(est.env[i]>mx)mx=est.env[i];let ms=0;while(ms<W&&est.env[ms]<0.35*mx)ms++;
+      let fb=est.phase;while(fb-P>=ms-P*0.3)fb-=P;while(fb<ms-P*0.3)fb+=P;
+      this.fbpm=est.bpm;this.period=60/est.bpm;const base=this.fbeat!=null?Math.max(0,Math.round(this.fbeat)):0;
+      this.fa={clock:clk(s0+fb),beat:base};this.state="lock";this.music=this.level;lastActive=-2;
+      this.msg("Following at "+est.bpm.toFixed(0)+" BPM","Lyrics move bar by bar. Wrong line? Tap the line you're on.");updateSrcPill();return;}
+    let lb=est.phase;while(lb+P<=W-1)lb+=P;const tb=clk(s0+lb);const x=this.beats(tb),err=x-Math.round(x);
+    this.fbpm=0.8*this.fbpm+0.2*est.bpm;const np=60/this.fbpm;
+    this.fa={clock:tb,beat:x-0.5*err};this.period=0.7*this.period+0.3*np;
+    this.music=this.music==null?this.level:this.music*0.9+this.level*0.1;
+    this.msg("Following at "+this.fbpm.toFixed(0)+" BPM","Bar "+(Math.floor(this.beats()/4)+1)+". Wrong line? Tap the line you're on.");
+  },
   setConf(s){this.score=s;$("#conf").style.width=clamp((s-0.1)/0.6*100,0,100)+"%";}
 };
 window.__sangan={T,st,get beat(){return beat},get times(){return times}};
@@ -657,7 +687,7 @@ function frame(){
     if(a!==lastActive){els.forEach((el,i)=>{el.classList.toggle("active",i===a);el.classList.toggle("past",i<a);el.classList.toggle("next",i===a+1||(a<0&&i===0));});
       const tgt=els[Math.max(0,a)];if(tgt){const vh=$("#viewport").clientHeight;box.style.transform="translateY("+(vh*0.4-tgt.offsetTop-tgt.offsetHeight/2)+"px)";}lastActive=a;}
     if(a>=0&&els[a]){const s=times[a],e=a+1<times.length?times[a+1]:s+barDur();els[a].style.setProperty("--p",clamp((t-s)/(e-s),0,1).toFixed(3));}}
-  if(st.src==="mic"&&T.state==="lock")$("#srcInfo").textContent="Mic · locked · "+fmt(T.pos());
+  if(st.src==="mic"&&T.state==="lock")$("#srcInfo").textContent=T.mode==="follow"?"Mic · "+T.fbpm.toFixed(0)+" BPM · bar "+(Math.floor(T.beats()/4)+1):"Mic · locked · "+fmt(T.pos());
   updateTime();requestAnimationFrame(frame);}
 
 syncSliders();renderLyrics();updateSrcPill();requestAnimationFrame(frame);
